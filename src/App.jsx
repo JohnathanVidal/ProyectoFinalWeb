@@ -1,35 +1,46 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+
+// Componentes de Contexto y Layout
+import { AuthProvider } from './Context/ContextoAutenticacion';
+// FIX: La carpeta se cambia de 'Components' a 'components' (estándar React en minúsculas)
+import RutaProtegida from './components/common/RutaProtegida';
+
+// Páginas Públicas
+import Home from './pages/public/Home';
+import Login from './pages/auth/Login';
+import NotFound from './pages/NotFound';
+import NoticiaDetalle from './pages/public/NoticiaDetalle';
+
+// Páginas Administrativas
+import Dashboard from './pages/admin/Dashboard';
+import ManageNews from './pages/admin/ManageNews';
+import ManageSections from './pages/admin/ManageSections';
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <Router>
+      <AuthProvider>
+        <Routes>
+
+          {/* Rutas Públicas (RF-11) */}
+          <Route path="/" element={<Home />} />
+          <Route path="/noticia/:id" element={<NoticiaDetalle />} />
+          <Route path="/login" element={<Login />} />
+
+          {/* Rutas Protegidas (RF-02) */}
+          <Route element={<RutaProtegida />}>
+            <Route path="/admin" element={<Dashboard />} />
+            <Route path="/admin/noticias" element={<ManageNews />} />
+            <Route path="/admin/secciones" element={<ManageSections />} />
+          </Route>
+
+          {/* Manejo de 404 */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </AuthProvider>
+    </Router>
+  );
 }
 
-export default App
+export default App;
