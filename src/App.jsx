@@ -1,6 +1,9 @@
 import React from 'react';
 import {
-  BrowserRouter as Router,
+  // -------------------------------------------------------------------
+  // CORRECCIÓN CLAVE: Se reemplaza BrowserRouter (Router) por HashRouter 
+  // para evitar errores 404 en GitHub Pages.
+  HashRouter as Router,
   Routes,
   Route
 } from 'react-router-dom';
@@ -9,7 +12,7 @@ import { Box, Typography } from '@mui/material';
 // Rutas Públicas
 import Home from './pages/public/Home';
 import Login from './pages/auth/Login';
-import NoticiaDetalle from './pages/public/NoticiaDetalle'; // Importación AÑADIDA
+import NoticiaDetalle from './pages/public/NoticiaDetalle';
 
 // Componentes de Administracion
 import Dashboard from './pages/admin/Dashboard';
@@ -24,6 +27,7 @@ import Header from './Components/Header/Header';
 function App() {
   return (
 
+    // 1. Usa HashRouter importado como Router
     <Router>
 
       <AuthProvider>
@@ -43,7 +47,7 @@ function App() {
 
             <Route path="/login" element={<Login />} />
 
-            {/* RUTA AÑADIDA: Detalle de Noticia */}
+            {/* Detalle de Noticia (Funciona con # en HashRouter) */}
             <Route path="/noticia/:id" element={<NoticiaDetalle />} />
 
 
@@ -67,7 +71,7 @@ function App() {
             <Route
               path="/admin/noticias"
               element={
-                // CORRECCIÓN CLAVE: Permite acceso a Reporteros (para crear) Y Editores (para publicar/gestionar).
+                // Permite acceso a Reporteros (para crear) Y Editores (para publicar/gestionar).
                 <RutaProtegida allowedRoles={['Reportero', 'Editor']}>
 
                   <ManageNews />
