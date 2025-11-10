@@ -1,36 +1,65 @@
 import React from 'react';
+import { Navigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../Context/ContextoAutenticacion';
-import { Navigate, Outlet } from 'react-router-dom';
-import { Box, CircularProgress, Typography } from '@mui/material';
+import { Box, CircularProgress, Typography, Button } from '@mui/material';
 
-const RutaProtegida = () => {
-    // Obtiene el estado de autenticación del contexto
-    const { isAuthenticated, isAuthReady } = useAuth();
 
-    // Muestra un loader mientras Firebase inicializa y verifica el estado de autenticación
+const RutaProtegida = ({ children, allowedRoles = [] }) => {
+
+    // Extraemos los valores del contexto
+    const { currentUser, userData, isAuthReady } = useAuth();
+
+    // 1. Mostrar Loader mientras se carga el estado de autenticación
     if (!isAuthReady) {
         return (
-            <Box sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                alignItems: 'center',
-                height: '100vh'
-            }}>
-                <CircularProgress color="primary" size={60} sx={{ mb: 2 }} />
-                <Typography variant="h6" color="textSecondary">Cargando autenticación...</Typography>
+            <Box display="flex" justifyContent="center" alignItems="center" height="50vh" flexDirection="column">
+                <CircularProgress size={60} sx={{ mb: 2 }} />
+                <Typography variant="h6" color="text.secondary">Cargando datos de usuario...</Typography>
             </Box>
         );
     }
 
-    // Si el usuario no está autenticado, redirige al login (RF-02)
-    if (!isAuthenticated) {
-        // Redirige usando el componente Navigate de react-router-dom
+
+    // 2. Si no hay usuario logueado, redirigir a Login
+    if (!currentUser) {
         return <Navigate to="/login" replace />;
     }
 
-    // Si el usuario está autenticado, renderiza la ruta hija (Dashboard o ManageNews)
-    return <Outlet />;
+
+    // 3. Verificar roles (Solo se verifica si se pasaron roles permitidos)
+    if (allowedRoles.length > 0) {
+
+        // La propiedad 'role' viene del mapeo en ContextoAutenticacion
+        const userRole = userData?.role;
+
+
+        if (!userRole || !allowedRoles.includes(userRole)) {
+            console.error(`Acceso denegado. Rol del usuario (${userRole}) no permitido.`);
+
+
+            // Mostrar página de acceso denegado
+            return (
+                <Box mt={5} textAlign="center">
+                    <Typography variant="h5" color="error">
+                        ACCESO DENEGADO
+                    </Typography>
+                    <Typography variant="body1">
+                        Su rol ({userRole || 'sin definir'}) no tiene permiso para ver esta página.
+                    </Typography>
+                    <Box mt={3}>
+                        <Button component={RouterLink} to="/" variant="contained">
+                            Ir a la página principal
+                        </Button>
+                    </Box>
+                </Box>
+            );
+        }
+
+    }
+
+
+    // 4. Si todas las verificaciones pasan, renderizar los componentes hijos
+    return children;
 };
 
 export default RutaProtegida;

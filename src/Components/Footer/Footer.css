@@ -1,0 +1,21 @@
+/* Este CSS se enfocará en asegurar que el contenido dentro del contenedor 
+  principal del Footer (el Container de Material-UI) esté perfectamente centrado
+  en caso de que los estilos de Box de MUI no fueran suficientes.
+*/
+
+/* Selector para el contenedor principal de la marca y contactos */
+/* Usamos una clase simple si los estilos de Box de MUI no bastan */
+.footer-content-container {
+    /* Aseguramos que el contenedor ocupe todo el ancho disponible */
+    width: 100%;
+    /* Usamos Flexbox para el centrado */
+    display: flex;
+    flex-direction: column;
+    /* Generalmente en el footer se quiere contenido en columna */
+    /* Centrado Horizontal (si la dirección es columna) */
+    align-items: center;
+    /* Centrado Vertical (si la dirección es columna y hay espacio, o para el caso de row) */
+    justify-content: center;
+    text-align: center;
+    /* Asegura que el texto dentro esté centrado */
+}

@@ -1,45 +1,118 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route
+} from 'react-router-dom';
+import { Box, Typography } from '@mui/material';
 
-// Componentes de Contexto y Layout
-import { AuthProvider } from './Context/ContextoAutenticacion';
-// FIX: La carpeta se cambia de 'Components' a 'components' (estándar React en minúsculas)
-import RutaProtegida from './components/common/RutaProtegida';
-
-// Páginas Públicas
+// Rutas Públicas
 import Home from './pages/public/Home';
 import Login from './pages/auth/Login';
-import NotFound from './pages/NotFound';
-import NoticiaDetalle from './pages/public/NoticiaDetalle';
+import NoticiaDetalle from './pages/public/NoticiaDetalle'; // Importación AÑADIDA
 
-// Páginas Administrativas
+// Componentes de Administracion
 import Dashboard from './pages/admin/Dashboard';
-import ManageNews from './pages/admin/ManageNews';
 import ManageSections from './pages/admin/ManageSections';
+import ManageNews from './pages/admin/ManageNews';
+
+// Componentes de Autenticación y Layout
+import { AuthProvider } from './Context/ContextoAutenticacion';
+import RutaProtegida from './Components/common/RutaProtegida';
+import Header from './Components/Header/Header';
 
 function App() {
   return (
+
     <Router>
+
       <AuthProvider>
-        <Routes>
 
-          {/* Rutas Públicas (RF-11) */}
-          <Route path="/" element={<Home />} />
-          <Route path="/noticia/:id" element={<NoticiaDetalle />} />
-          <Route path="/login" element={<Login />} />
+        <Header />
 
-          {/* Rutas Protegidas (RF-02) */}
-          <Route element={<RutaProtegida />}>
-            <Route path="/admin" element={<Dashboard />} />
-            <Route path="/admin/noticias" element={<ManageNews />} />
-            <Route path="/admin/secciones" element={<ManageSections />} />
-          </Route>
 
-          {/* Manejo de 404 */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        {/* Usamos Box para el contenido principal */}
+
+        <Box component="main" sx={{ p: 3 }}>
+
+          <Routes>
+
+            {/* Rutas Públicas */}
+
+            <Route path="/" element={<Home />} />
+
+            <Route path="/login" element={<Login />} />
+
+            {/* RUTA AÑADIDA: Detalle de Noticia */}
+            <Route path="/noticia/:id" element={<NoticiaDetalle />} />
+
+
+            {/* RUTA PROTEGIDA: DASHBOARD (HOME ADMIN) */}
+
+            <Route
+              path="/admin"
+              element={
+                // DASHBOARD es para Reporteros Y Editores
+                <RutaProtegida allowedRoles={['Reportero', 'Editor']}>
+
+                  <Dashboard />
+
+                </RutaProtegida>
+              }
+            />
+
+
+            {/* RUTA PROTEGIDA: GESTIÓN DE NOTICIAS */}
+
+            <Route
+              path="/admin/noticias"
+              element={
+                // CORRECCIÓN CLAVE: Permite acceso a Reporteros (para crear) Y Editores (para publicar/gestionar).
+                <RutaProtegida allowedRoles={['Reportero', 'Editor']}>
+
+                  <ManageNews />
+
+                </RutaProtegida>
+              }
+            />
+
+
+            {/* RUTA PROTEGIDA: GESTIÓN DE SECCIONES */}
+
+            <Route
+              path="/admin/secciones"
+              element={
+                // Solo Editores pueden gestionar secciones
+                <RutaProtegida allowedRoles={['Editor']}>
+
+                  <ManageSections />
+
+                </RutaProtegida>
+              }
+            />
+
+
+            {/* Manejo de 404 para cualquier otra ruta */}
+
+            <Route path="*" element={
+
+              <Box mt={5} textAlign="center">
+
+                <Typography variant="h4" color="error">404 - Página no encontrada</Typography>
+
+              </Box>
+            }
+            />
+
+
+          </Routes>
+
+        </Box>
+
       </AuthProvider>
+
     </Router>
+
   );
 }
 

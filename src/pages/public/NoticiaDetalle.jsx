@@ -4,176 +4,241 @@ import {
     Container,
     Typography,
     Box,
-    CircularProgress,
-    Alert,
     Paper,
-    Divider,
-    Button
+    CircularProgress,
+    Button,
+    Alert,
+    Chip,
+    Tooltip,
 } from '@mui/material';
-import { ArrowBack, Newspaper } from '@mui/icons-material';
+import { Newspaper, Login, AccessTime, Person, ArrowBack } from '@mui/icons-material';
 import { obtenerNoticiaPorId } from '../../services/NoticiaService';
+import Footer from '../../Components/Footer/Footer';
+
+// ====================================================================
+// FUNCIÓN UNIVERSAL PARA OBTENER LA FECHA REAL DE UN TIMESTAMP DE FIRESTORE
+// ====================================================================
+const getDateValue = (timestamp) => {
+    if (!timestamp) return null;
+    if (typeof timestamp.toDate === 'function') {
+        return timestamp.toDate();
+    }
+    if (typeof timestamp.seconds === 'number') {
+        return new Date(timestamp.seconds * 1000);
+    }
+    const date = new Date(timestamp);
+    if (!isNaN(date.getTime())) {
+        return date;
+    }
+    return null;
+};
 
 const NoticiaDetalle = () => {
-    const { id } = useParams(); // Obtiene el parámetro ID de la URL
+    const { id } = useParams();
     const [noticia, setNoticia] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const loadNoticia = useCallback(async () => {
+    const fetchNoticia = useCallback(async () => {
         if (!id) {
             setError("ID de noticia no proporcionado.");
             setLoading(false);
             return;
         }
-
-        setLoading(true);
-        setError(null);
         try {
             const data = await obtenerNoticiaPorId(id);
-
-            // Verificación adicional: La noticia debe estar publicada para ser visible al público
             if (data && data.estado === 'Publicado') {
-                // Convertir fechas si son Firestore Timestamps
-                const fechaPublicacion = data.fechaActualizacion.toDate ? data.fechaActualizacion.toDate() : new Date(data.fechaActualizacion);
-
-                setNoticia({
-                    ...data,
-                    fechaPublicacion: fechaPublicacion.toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' })
-                });
+                setNoticia(data);
             } else {
-                setNoticia(null);
-                setError("La noticia no existe o aún no ha sido publicada.");
+                setError("La noticia no existe o no está publicada.");
             }
         } catch (err) {
-            setError("Error al cargar los detalles de la noticia.");
-            console.error(err);
+            console.error("Error al cargar la noticia:", err);
+            setError("Error al cargar la noticia. Inténtelo más tarde.");
         } finally {
             setLoading(false);
         }
     }, [id]);
 
     useEffect(() => {
-        loadNoticia();
-    }, [loadNoticia]);
+        fetchNoticia();
+    }, [fetchNoticia]);
 
-    // --- Renderizado de estados ---
+    const formatFecha = (timestamp) => {
+        const date = getDateValue(timestamp);
+        if (!date) return 'Fecha Desconocida';
 
+        return date.toLocaleDateString('es-ES', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+        });
+    };
+
+    // --- Renderizado de Carga y Error ---
     if (loading) {
         return (
-            <Container maxWidth="md" sx={{ mt: 10, textAlign: 'center' }}>
-                <CircularProgress />
-                <Typography sx={{ mt: 2 }}>Cargando noticia...</Typography>
-            </Container>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: '#f4f7f9' }}>
+                <CircularProgress color="primary" />
+                <Typography variant="h6" sx={{ mt: 2, color: '#333' }}>Cargando noticia...</Typography>
+            </Box>
         );
     }
-
-    if (error) {
+    if (error || !noticia) {
         return (
-            <Container maxWidth="md" sx={{ mt: 5 }}>
-                <Alert severity="error">{error}</Alert>
-                <Box sx={{ mt: 3 }}>
-                    <Button component={RouterLink} to="/" startIcon={<ArrowBack />} variant="outlined">
-                        Volver al inicio
-                    </Button>
+            <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f4f7f9' }}>
+                <Box sx={{ bgcolor: '#1a237e', color: 'white', py: 3, mb: 4, boxShadow: 3 }}>
+                    <Container maxWidth="lg" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Newspaper sx={{ mr: 1, fontSize: 35 }} />
+                            <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
+                                FuckNews VDL
+                            </Typography>
+                        </Box>
+                        <Tooltip title="Acceso al panel de administración">
+                            <Button component={RouterLink} to="/login" color="inherit" variant="outlined" startIcon={<Login />} sx={{ borderColor: 'white' }}>
+                                Acceso Admin
+                            </Button>
+                        </Tooltip>
+                    </Container>
                 </Box>
-            </Container>
-        );
-    }
-
-    if (!noticia) {
-        return (
-            <Container maxWidth="md" sx={{ mt: 5 }}>
-                <Alert severity="warning">
-                    No se encontró la noticia o no está disponible públicamente.
-                </Alert>
-                <Box sx={{ mt: 3 }}>
-                    <Button component={RouterLink} to="/" startIcon={<ArrowBack />} variant="outlined">
-                        Volver al inicio
-                    </Button>
-                </Box>
-            </Container>
+                <Container maxWidth="md" sx={{ flexGrow: 1, my: 4 }}>
+                    <Alert severity="error">{error || 'Noticia no disponible.'}</Alert>
+                    <Box sx={{ mt: 3, textAlign: 'center' }}>
+                        <Button component={RouterLink} to="/" variant="contained" startIcon={<ArrowBack />} sx={{ bgcolor: '#1a237e', '&:hover': { bgcolor: '#0d47a1' } }}>
+                            Volver al Inicio
+                        </Button>
+                    </Box>
+                </Container>
+                <Footer />
+            </Box>
         );
     }
 
     // --- Renderizado de la Noticia ---
-
     return (
-        <Box sx={{ minHeight: '100vh', backgroundColor: '#f4f7f9' }}>
+        <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f4f7f9' }}>
             {/* Header del sitio */}
-            <Box sx={{ bgcolor: 'primary.main', color: 'white', py: 3, mb: 4 }}>
+            <Box sx={{ bgcolor: '#1a237e', color: 'white', py: 3, mb: 4, boxShadow: 3 }}>
                 <Container maxWidth="lg" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <Newspaper sx={{ mr: 1, fontSize: 35 }} />
                         <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
-                            Mi CMS
+                            FuckNews VDL
                         </Typography>
                     </Box>
-                    <Button
-                        component={RouterLink}
-                        to="/"
-                        variant="outlined"
-                        color="inherit"
-                        startIcon={<ArrowBack />}
-                        sx={{ borderColor: 'white', color: 'white' }}
-                    >
-                        Volver al Listado
-                    </Button>
+                    <Tooltip title="Volver al listado de noticias">
+                        <Button
+                            component={RouterLink}
+                            to="/"
+                            variant="outlined"
+                            color="inherit"
+                            startIcon={<ArrowBack />}
+                            sx={{ borderColor: 'white' }}
+                        >
+                            Listado
+                        </Button>
+                    </Tooltip>
                 </Container>
             </Box>
 
-            <Container maxWidth="md">
-                <Paper elevation={3} sx={{ p: 4, mb: 4 }}>
-                    <Typography variant="h3" component="h1" gutterBottom sx={{ fontWeight: 'bold', mb: 2 }}>
+            <Container maxWidth="md" sx={{ flexGrow: 1 }}>
+                <Paper elevation={4} sx={{ p: { xs: 2, md: 4 }, mb: 4, borderRadius: 2 }}>
+
+                    {/* Título */}
+                    <Typography variant="h3" component="h1" gutterBottom sx={{ fontWeight: 'bold', color: '#1a237e', mb: 1 }}>
                         {noticia.titulo}
                     </Typography>
 
-                    <Box sx={{ color: 'text.secondary', mb: 3 }}>
-                        <Typography variant="subtitle1">
-                            Publicado: {noticia.fechaPublicacion}
+                    {/* CAMBIO CLAVE: Subtítulo ahora usa el estilo de la línea verde (Blockquote) */}
+                    {noticia.subtitulo && (
+                        <Typography
+                            variant="h6"
+                            component="p"
+                            sx={{
+                                fontStyle: 'italic',
+                                color: '#37474f',
+                                borderLeft: '3px solid #00796b', // Línea verde
+                                pl: 2,
+                                py: 1,
+                                mb: 4,
+                                fontWeight: 'regular' // Quitamos la negrita
+                            }}
+                        >
+                            {noticia.subtitulo} {/* Quitamos los ** */}
                         </Typography>
-                        <Typography variant="subtitle2">
-                            Sección: {noticia.seccion} | Autor: {noticia.autor}
-                        </Typography>
+                    )}
+
+                    {/* Metadatos */}
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, color: 'text.secondary', mb: 3 }}>
+                        <Chip
+                            icon={<Person fontSize="small" />}
+                            label={noticia.autor || 'Anónimo'}
+                            size="small"
+                        />
+                        <Chip
+                            icon={<AccessTime fontSize="small" />}
+                            label={`Publicado el: ${formatFecha(noticia.fechaCreacion)}`}
+                            size="small"
+                        />
+                        <Chip
+                            label={noticia.categoria || 'Sin Categoría'}
+                            size="small"
+                            color="primary"
+                            sx={{ bgcolor: '#00796b', color: 'white', fontWeight: 'bold' }}
+                        />
                     </Box>
 
-                    <Divider sx={{ mb: 3 }} />
+                    {/* Resumen (Mantenemos, pero sin el estilo destacado si el subtítulo lo usa) */}
+                    {noticia.resumen && (
+                        <Typography variant="body1" component="p" sx={{ mb: 3, color: 'text.primary' }}>
+                            **Resumen:** {noticia.resumen}
+                        </Typography>
+                    )}
 
+                    {/* Imagen Principal */}
                     {noticia.imagenUrl && (
-                        <Box sx={{ mb: 4, maxHeight: 400, overflow: 'hidden', borderRadius: 1 }}>
+                        <Box sx={{ mb: 4, borderRadius: 2, boxShadow: 2, overflow: 'hidden' }}>
                             <img
                                 src={noticia.imagenUrl}
-                                alt={noticia.titulo}
-                                style={{ width: '100%', height: 'auto', objectFit: 'cover' }}
+                                alt={noticia.descripcionImagen || noticia.titulo}
+                                style={{ width: '100%', height: 'auto', objectFit: 'contain' }}
+                                onError={(e) => {
+                                    e.target.onerror = null;
+                                    e.target.src = 'https://placehold.co/800x600/CCCCCC/333333?text=Imagen+No+Disponible';
+                                }}
                             />
+                            {noticia.descripcionImagen && (
+                                <Typography variant="caption" display="block" sx={{ mt: 1, color: 'text.secondary', textAlign: 'center' }}>
+                                    {noticia.descripcionImagen}
+                                </Typography>
+                            )}
                         </Box>
                     )}
 
+                    {/* Contenido Principal */}
                     <Typography
                         variant="body1"
                         component="div"
                         sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}
                     >
-                        {/* El 'whiteSpace: pre-wrap' respeta los saltos de línea ingresados por el Reportero */}
-                        {noticia.cuerpo}
+                        {noticia.contenido}
                     </Typography>
-
                 </Paper>
 
                 <Box sx={{ mb: 5, textAlign: 'center' }}>
-                    <Button component={RouterLink} to="/" startIcon={<ArrowBack />} variant="contained" size="large">
+                    <Button
+                        component={RouterLink}
+                        to="/"
+                        variant="contained"
+                        startIcon={<ArrowBack />}
+                        sx={{ bgcolor: '#1a237e', '&:hover': { bgcolor: '#0d47a1' } }}
+                    >
                         Ver todas las noticias
                     </Button>
                 </Box>
             </Container>
-
-            {/* Footer simple */}
-            <Box sx={{ bgcolor: '#333', color: 'white', py: 3, mt: 5, textAlign: 'center' }}>
-                <Container maxWidth="lg">
-                    <Typography variant="body2">
-                        © {new Date().getFullYear()} Mi CMS. Todos los derechos reservados.
-                    </Typography>
-                </Container>
-            </Box>
+            <Footer />
         </Box>
     );
 };

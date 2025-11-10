@@ -19,7 +19,8 @@ import {
     Select,
     MenuItem,
     FormControl,
-    InputLabel
+    InputLabel,
+    Chip
 } from '@mui/material';
 import {
     Add as AddIcon,
@@ -33,106 +34,120 @@ import {
     actualizarSeccion,
     eliminarSeccion
 } from '../../services/SeccionService';
+import { useAuth } from '../../Context/ContextoAutenticacion';
 
 // Mapeo de estados para estilos visuales
-const ESTADO_COLORES = {
-    'Activa': 'success',
-    'Inactiva': 'error',
+const ESTADO_COLORES =
+{
+    'Activa': { label: 'Activa', color: 'success' },
+    'Inactiva': { label: 'Inactiva', color: 'error' },
 };
 
 const ManageSections = () => {
+    const { userData } = useAuth();
     const [secciones, setSecciones] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [successMessage, setSuccessMessage] = useState(null);
 
-    // Estado para el formulario de crear/editar
-    const [isEditing, setIsEditing] = useState(false);
-    const [currentId, setCurrentId] = useState(null);
+    // Estado del formulario
     const [nombre, setNombre] = useState('');
     const [estado, setEstado] = useState('Activa');
+    const [isEditing, setIsEditing] = useState(false);
+    const [currentSeccionId, setCurrentSeccionId] = useState(null);
 
-    // Función principal para cargar las secciones
+
     const loadSecciones = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const list = await obtenerSecciones();
-            setSecciones(list);
+            const data = await obtenerSecciones();
+            setSecciones(data);
         } catch (err) {
-            setError("Error al cargar las secciones. Revise la consola.");
+            console.error("Error al cargar secciones:", err);
+            setError("Fallo al cargar las secciones.");
         } finally {
             setLoading(false);
         }
     }, []);
 
-    // Cargar secciones al montar el componente
     useEffect(() => {
-        loadSecciones();
-    }, [loadSecciones]);
+        if (userData && userData.rol === 'Editor') {
+            loadSecciones();
+        }
+    }, [userData, loadSecciones]);
 
-    // Función para resetear el formulario
     const resetForm = () => {
-        setIsEditing(false);
-        setCurrentId(null);
         setNombre('');
         setEstado('Activa');
+        setIsEditing(false);
+        setCurrentSeccionId(null);
     };
 
-    // Manejador de Creación/Actualización (RF-08)
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
         setError(null);
+        setSuccessMessage(null);
 
         try {
             if (isEditing) {
-                await actualizarSeccion(currentId, { nombre, estado });
-                setSuccessMessage("Sección actualizada exitosamente.");
+                await actualizarSeccion(currentSeccionId, { nombre, estado });
+                setSuccessMessage("Sección actualizada con éxito.");
             } else {
                 await crearSeccion(nombre, estado);
-                setSuccessMessage("Sección creada exitosamente.");
+                setSuccessMessage("Sección creada con éxito.");
             }
-
-            resetForm(); // Limpiar formulario
-            loadSecciones(); // Recargar lista
-
+            resetForm();
+            await loadSecciones();
         } catch (err) {
-            setError(err.message || "Error al procesar la sección. Inténtalo de nuevo.");
+            setError(err.message || "Fallo al guardar la sección.");
         } finally {
             setLoading(false);
         }
     };
 
-    // Manejador de Edición
     const handleEditClick = (seccion) => {
-        setIsEditing(true);
-        setCurrentId(seccion.id);
         setNombre(seccion.nombre);
         setEstado(seccion.estado);
+        setCurrentSeccionId(seccion.id);
+        setIsEditing(true);
+        window.scrollTo(0, 0);
     };
 
-    // Manejador de Eliminación
     const handleDelete = async (id) => {
-        if (window.confirm("¿Estás seguro de que quieres eliminar esta sección? Esto podría afectar noticias asociadas.")) {
+        if (window.confirm("¿Está seguro de que desea eliminar esta sección?")) {
             setLoading(true);
+            setError(null);
+            setSuccessMessage(null);
             try {
                 await eliminarSeccion(id);
-                setSuccessMessage("Sección eliminada correctamente.");
-                loadSecciones();
+                setSuccessMessage("Sección eliminada con éxito.");
+                await loadSecciones();
             } catch (err) {
-                setError("Error al eliminar la sección. Inténtalo de nuevo.");
+                setError(err.message || "Fallo al eliminar la sección.");
             } finally {
                 setLoading(false);
             }
         }
     };
 
+    // --- Restricción de Acceso ---
+    if (!userData || userData.rol !== 'Editor') {
+        return (
+            <Container maxWidth="sm" sx={{ mt: 5 }}>
+                <Alert severity="error" variant="filled">
+                    Acceso Denegado. Solo los Editores pueden gestionar secciones.
+                </Alert>
+            </Container>
+        );
+    }
+
     if (loading && secciones.length === 0) {
         return (
-            <Container maxWidth="md" sx={{ mt: 5, textAlign: 'center' }}>
+            <Container maxWidth="sm" sx={{ mt: 5, textAlign: 'center' }}>
                 <CircularProgress />
-                <Typography>Cargando secciones...</Typography>
+                <Typography sx={{ mt: 2 }}>Cargando secciones...</Typography>
             </Container>
         );
     }
@@ -140,15 +155,17 @@ const ManageSections = () => {
     return (
         <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 4 }}>
-                <CategoryIcon sx={{ mr: 1, fontSize: 35, color: 'primary.main' }} />
+                <CategoryIcon sx={{ mr: 2, fontSize: 40, color: 'primary.main' }} />
                 <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
-                    Gestión de Secciones (RF-08)
+                    Gestión de Secciones
                 </Typography>
             </Box>
+
 
             {/* Mensajes de feedback */}
             {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
             {successMessage && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccessMessage(null)}>{successMessage}</Alert>}
+
 
             {/* Formulario de Creación/Edición */}
             <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
@@ -166,7 +183,7 @@ const ManageSections = () => {
                         sx={{ minWidth: 200 }}
                     />
 
-                    <FormControl sx={{ minWidth: 150 }}>
+                    <FormControl sx={{ minWidth: 150 }} required>
                         <InputLabel id="estado-label">Estado</InputLabel>
                         <Select
                             labelId="estado-label"
@@ -184,7 +201,7 @@ const ManageSections = () => {
                         type="submit"
                         variant="contained"
                         startIcon={isEditing ? <EditIcon /> : <AddIcon />}
-                        disabled={loading || !nombre}
+                        disabled={loading || !nombre.trim() || !estado}
                         sx={{ height: '56px' }}
                     >
                         {loading ? <CircularProgress size={24} color="inherit" /> : (isEditing ? 'Guardar Cambios' : 'Crear')}
@@ -200,19 +217,22 @@ const ManageSections = () => {
                             Cancelar
                         </Button>
                     )}
+
                 </Box>
+
             </Paper>
+
 
             {/* Tabla de Secciones */}
             <Paper elevation={3}>
                 <TableContainer>
                     <Table>
-                        <TableHead>
+                        <TableHead sx={{ bgcolor: '#e8eaf6' }}>
                             <TableRow>
-                                <TableCell>Nombre</TableCell>
-                                <TableCell>Estado</TableCell>
-                                <TableCell>Fecha de Creación</TableCell>
-                                <TableCell align="center">Acciones</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold' }}>Nombre</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold' }}>Estado</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold' }}>Fecha de Creación</TableCell>
+                                <TableCell align="center" sx={{ fontWeight: 'bold' }}>Acciones</TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
@@ -220,14 +240,16 @@ const ManageSections = () => {
                                 <TableRow key={seccion.id} hover>
                                     <TableCell sx={{ fontWeight: 'medium' }}>{seccion.nombre}</TableCell>
                                     <TableCell>
-                                        <Alert
-                                            severity={ESTADO_COLORES[seccion.estado] || 'default'}
-                                            sx={{ py: 0, px: 1, textTransform: 'capitalize' }}
-                                        >
-                                            {seccion.estado}
-                                        </Alert>
+                                        <Chip
+                                            label={ESTADO_COLORES[seccion.estado].label}
+                                            color={ESTADO_COLORES[seccion.estado].color}
+                                            size="small"
+                                            variant="outlined"
+                                        />
                                     </TableCell>
-                                    <TableCell>{new Date(seccion.createdAt.toDate ? seccion.createdAt.toDate() : seccion.createdAt).toLocaleDateString()}</TableCell>
+                                    <TableCell>
+                                        {new Date(seccion.createdAt.toDate ? seccion.createdAt.toDate() : seccion.createdAt).toLocaleDateString()}
+                                    </TableCell>
                                     <TableCell align="center">
                                         <Tooltip title="Editar">
                                             <IconButton color="primary" onClick={() => handleEditClick(seccion)} size="small">
@@ -246,7 +268,9 @@ const ManageSections = () => {
                     </Table>
                 </TableContainer>
             </Paper>
+
         </Container>
+
     );
 };
 

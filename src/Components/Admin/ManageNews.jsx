@@ -1,269 +1,256 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-    Container,
-    Typography,
-    Box,
-    Button,
-    Paper,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    CircularProgress,
-    Alert,
-    IconButton,
-    Tooltip,
-    Select,
-    MenuItem,
-    FormControl,
-    InputLabel
-} from '@mui/material';
-import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Publish as PublishIcon, Block as BlockIcon, CheckCircle as CheckCircleIcon } from '@mui/icons-material';
-import NewsFormModal from '../../Components/Admin/NewsFormModal'; // Modal que acabamos de crear
-import {
-    obtenerNoticiasAdministracion,
-    eliminarNoticia,
-    marcarComoTerminado,
-    cambiarEstadoPublicacion
-} from '../../services/NoticiaService';
 import { useAuth } from '../../Context/ContextoAutenticacion';
+import { Link as RouterLink } from 'react-router-dom';
+import {
+    crearNoticia,
+    obtenerNoticiasAdministracion,
+    actualizarNoticia,
+    eliminarNoticia,
+    obtenerNoticiasPendientesPublicacion,
+} from '../../services/NoticiaService';
+import NewsForm from '../../Components/admin/NewsForm';
+import NewsTable from '../../Components/admin/NewsTable';
+import { Container, Typography, Alert, Box, Button } from '@mui/material'; // Agregamos Button para el header
+import { Article, KeyboardArrowLeft } from '@mui/icons-material'; // Iconos para el header
 
-// Mapeo de estados para estilos visuales
-const ESTADO_COLORES = {
-    'Edición': 'info',
-    'Terminado': 'warning',
-    'Pendiente': 'secondary', // Si se introduce un estado 'Pendiente'
-    'Publicado': 'success',
-    'Desactivado': 'error',
-};
 
 const ManageNews = () => {
-    const { userData, isAuthReady } = useAuth();
+
+    const { userData, isEditor } = useAuth();
+
     const [noticias, setNoticias] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [editingNoticia, setEditingNoticia] = useState(null);
     const [successMessage, setSuccessMessage] = useState(null);
 
-    // Estado para el modal de formulario
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [noticiaToEditId, setNoticiaToEditId] = useState(null);
+    // Estado para gestionar la cola de revisión (solo para Editores)
+    const [colaRevision, setColaRevision] = useState([]);
 
-    // Función principal para cargar las noticias (RF-05)
+
     const loadNoticias = useCallback(async () => {
-        if (!userData || !userData.rol || !isAuthReady) return;
-
         setLoading(true);
         setError(null);
         try {
-            const list = await obtenerNoticiasAdministracion(userData.rol, userData.uid);
-            setNoticias(list);
+            // Se asume que obtenerNoticiasAdministracion usa userData.rol y userData.uid correctamente
+            const fetchedNoticias = await obtenerNoticiasAdministracion(userData.rol, userData.uid);
+            setNoticias(fetchedNoticias);
         } catch (err) {
-            setError("Error al cargar las noticias. Revise la consola.");
+            console.error("Error al cargar noticias:", err);
+            setError("Fallo al cargar las noticias. Intente de nuevo.");
         } finally {
             setLoading(false);
         }
-    }, [userData, isAuthReady]);
+    }, [userData]);
 
-    // Cargar noticias al iniciar o cuando los datos del usuario estén listos
-    useEffect(() => {
-        if (isAuthReady) {
-            loadNoticias();
+
+    const loadColaRevision = useCallback(async () => {
+        if (!isEditor) return;
+        try {
+            const fetchedCola = await obtenerNoticiasPendientesPublicacion();
+            setColaRevision(fetchedCola);
+        } catch (err) {
+            console.error("Error al cargar cola de revisión:", err);
         }
-    }, [isAuthReady, loadNoticias]);
+    }, [isEditor]);
 
-    // Manejadores del Modal
-    const handleOpenCreate = () => {
-        setNoticiaToEditId(null);
-        setIsModalOpen(true);
-    };
 
-    const handleOpenEdit = (noticiaId) => {
-        setNoticiaToEditId(noticiaId);
-        setIsModalOpen(true);
-    };
+    useEffect(() => {
+        if (userData) {
+            loadNoticias();
+            loadColaRevision();
+        }
+    }, [userData, loadNoticias, loadColaRevision]);
 
-    const handleModalSuccess = (message) => {
-        setSuccessMessage(message);
-        loadNoticias(); // Recargar la lista después de crear/editar
-    };
 
-    // Manejador de Eliminación (RF-09)
-    const handleDelete = async (id, imageStoragePath) => {
-        if (window.confirm("¿Estás seguro de que quieres eliminar esta noticia? Esta acción es irreversible y también borrará la imagen asociada.")) {
+    const handleSave = async (data, imagenFile, currentPublicId) => {
+        try {
             setLoading(true);
+            setSuccessMessage(null);
+
+            if (editingNoticia) {
+                // Actualizar
+                await actualizarNoticia(editingNoticia.id, data, imagenFile, currentPublicId);
+                setSuccessMessage("Noticia actualizada con éxito.");
+                setEditingNoticia(null);
+            } else {
+                // Crear (se asegura que el campo autor en Firestore sea el UID)
+                await crearNoticia(data, imagenFile, userData.uid);
+                setSuccessMessage("Noticia creada con éxito. Estado inicial: Edición.");
+            }
+
+        } catch (err) {
+            console.error("Error al guardar noticia:", err);
+            setError(err.message || "Fallo al guardar la noticia.");
+        } finally {
+            // Actualizar ambas listas tras la operación
+            await loadNoticias();
+            await loadColaRevision();
+            setLoading(false);
+        }
+    };
+
+
+    const handleDelete = async (id, imagenPublicId) => {
+        if (window.confirm("¿Está seguro de que desea eliminar esta noticia?")) {
             try {
-                // Llama al servicio que maneja tanto Firestore como Storage
-                await eliminarNoticia(id, imageStoragePath);
-                setSuccessMessage("Noticia eliminada correctamente.");
-                loadNoticias();
+                await eliminarNoticia(id, imagenPublicId);
+                setSuccessMessage("Noticia eliminada con éxito.");
+                // Actualizar ambas listas tras la eliminación
+                await loadNoticias();
+                await loadColaRevision();
             } catch (err) {
-                setError("Error al eliminar la noticia. Inténtalo de nuevo.");
-            } finally {
-                setLoading(false);
+                console.error("Error al eliminar noticia:", err);
+                setError("Fallo al eliminar la noticia.");
             }
         }
     };
 
-    // Manejadores de Estado (RF-07)
-    const handleMarcarTerminado = async (id) => {
-        try {
-            await marcarComoTerminado(id);
-            setSuccessMessage("Noticia marcada como 'Terminado'. Lista para revisión.");
-            loadNoticias();
-        } catch (err) {
-            setError("Fallo al cambiar el estado.");
-        }
+
+    const handleEdit = (noticia) => {
+        setEditingNoticia(noticia);
+        window.scrollTo(0, 0); // Desplazar al formulario
     };
 
-    const handleCambiarPublicacion = async (id, nuevoEstado) => {
-        try {
-            await cambiarEstadoPublicacion(id, nuevoEstado);
-            setSuccessMessage(`Estado de publicación cambiado a '${nuevoEstado}'.`);
-            loadNoticias();
-        } catch (err) {
-            setError("Fallo al cambiar el estado de publicación.");
-        }
+
+    const handleCancelEdit = () => {
+        setEditingNoticia(null);
     };
 
-    const isEditor = userData && userData.rol === 'Editor';
-    const isReportero = userData && userData.rol === 'Reportero';
-
-    if (!isAuthReady || loading) {
-        return (
-            <Container maxWidth="md" sx={{ mt: 5, textAlign: 'center' }}>
-                <CircularProgress />
-                <Typography>Cargando noticias...</Typography>
-            </Container>
-        );
-    }
 
     return (
-        <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-                <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
-                    📰 Gestión de Noticias (RF-06)
-                </Typography>
+        // Utilizamos el layout del Admin Dashboard (Header y Footer en Box)
+        <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f4f7f9' }}>
 
-                {/* Botón de Creación (Visible solo para Reportero, RF-06) */}
-                {isReportero && (
+            {/* Header del Admin: Gestión de Noticias */}
+            <Box sx={{ bgcolor: '#1a237e', color: 'white', py: 3, mb: 4, boxShadow: 3 }}>
+                <Container maxWidth="lg" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Article sx={{ mr: 1, fontSize: 35 }} />
+                        <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
+                            Gestión de Contenido
+                        </Typography>
+                    </Box>
                     <Button
-                        variant="contained"
-                        startIcon={<AddIcon />}
-                        onClick={handleOpenCreate}
+                        component={RouterLink}
+                        to="/admin"
+                        color="inherit"
+                        variant="outlined"
+                        startIcon={<KeyboardArrowLeft />}
+                        sx={{ borderColor: 'white' }}
                     >
-                        Crear Nueva Noticia
+                        Volver al Dashboard
                     </Button>
-                )}
+                </Container>
             </Box>
 
-            {/* Mensajes de feedback */}
-            {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
-            {successMessage && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccessMessage(null)}>{successMessage}</Alert>}
+            {/* Contenido Principal de Gestión */}
+            <Container maxWidth="xl" sx={{ flexGrow: 1, mb: 4 }}>
+                <Box sx={{ p: { xs: 2, md: 4 }, bgcolor: '#ffffff', borderRadius: 2, boxShadow: 3 }}>
 
-            {/* Mensaje de datos vacíos */}
-            {noticias.length === 0 ? (
-                <Alert severity="info">
-                    No hay noticias disponibles en esta vista.
-                </Alert>
-            ) : (
-                <Paper elevation={3}>
-                    <TableContainer>
-                        <Table stickyHeader>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell>Título</TableCell>
-                                    <TableCell>Sección</TableCell>
-                                    <TableCell>Autor</TableCell>
-                                    <TableCell>Estado (RF-07)</TableCell>
-                                    <TableCell>Última Act.</TableCell>
-                                    <TableCell align="center">Acciones</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {noticias.map((noticia) => (
-                                    <TableRow key={noticia.id} hover>
-                                        <TableCell sx={{ fontWeight: 'medium' }}>{noticia.titulo}</TableCell>
-                                        <TableCell>{noticia.seccion || 'N/A'}</TableCell>
-                                        <TableCell>{noticia.autor}</TableCell>
+                    {/* Título Principal */}
+                    <Typography
+                        variant="h4"
+                        component="h1"
+                        gutterBottom
+                        sx={{
+                            fontWeight: 'bold',
+                            borderBottom: '2px solid #e0e0e0',
+                            pb: 1,
+                            color: '#1a237e',
+                            mb: 3
+                        }}
+                    >
+                        {editingNoticia ? 'Editar Noticia' : 'Crear Nueva Noticia'}
+                        <span style={{ color: '#00796b', fontSize: '1rem', marginLeft: '10px' }}>
+                            ({userData?.rol})
+                        </span>
+                    </Typography>
 
-                                        {/* Columna de Estado */}
-                                        <TableCell>
-                                            <Alert
-                                                severity={ESTADO_COLORES[noticia.estado] || 'default'}
-                                                sx={{ py: 0, px: 1, textTransform: 'capitalize' }}
-                                            >
-                                                {noticia.estado}
-                                            </Alert>
-                                        </TableCell>
+                    {/* Mensajes de Estado */}
+                    {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
+                    {successMessage && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccessMessage(null)}>{successMessage}</Alert>}
 
-                                        <TableCell>{new Date(noticia.fechaActualizacion).toLocaleDateString()}</TableCell>
+                    {/* Formulario de Creación/Edición */}
+                    <NewsForm
+                        onSave={handleSave}
+                        onCancelEdit={handleCancelEdit}
+                        editingNoticia={editingNoticia}
+                        loading={loading}
+                        isEditor={isEditor}
+                    />
 
-                                        {/* Columna de Acciones */}
-                                        <TableCell align="center" sx={{ minWidth: '200px' }}>
-                                            {/* Edición (RF-06) - Disponible en estado 'Edición' y 'Desactivado' */}
-                                            {(noticia.estado === 'Edición' || noticia.estado === 'Desactivado') && (
-                                                <Tooltip title="Editar Noticia">
-                                                    <IconButton color="primary" onClick={() => handleOpenEdit(noticia.id)} size="small">
-                                                        <EditIcon />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            )}
 
-                                            {/* Marcar Terminado (RF-07) - Solo Reportero, solo si está en 'Edición' */}
-                                            {isReportero && noticia.estado === 'Edición' && (
-                                                <Tooltip title="Enviar a Revisión (Terminado)">
-                                                    <IconButton color="warning" onClick={() => handleMarcarTerminado(noticia.id)} size="small">
-                                                        <CheckCircleIcon />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            )}
+                    {/* Cola de revisión (solo para Editores) - Título Limpio */}
+                    {isEditor && (
+                        <Box sx={{ mt: 5, mb: 5 }}>
+                            <Typography
+                                variant="h5"
+                                component="h2"
+                                gutterBottom
+                                sx={{
+                                    fontWeight: '600',
+                                    color: '#d32f2f', // Usamos un color de advertencia/peligro para la revisión
+                                    borderBottom: '1px dashed #d32f2f',
+                                    pb: 1
+                                }}
+                            >
+                                🚨 Cola de Noticias Listas para Publicación
+                            </Typography>
+                            <NewsTable
+                                noticias={colaRevision}
+                                onEdit={handleEdit}
+                                onDelete={handleDelete}
+                                loading={loading}
+                                isEditor={isEditor}
+                                showQueue={true} // Marca para mostrar la tabla como cola
+                                refreshData={loadColaRevision} // Función para refrescar la cola
+                            />
+                            {colaRevision.length === 0 && (
+                                <Alert severity="info" sx={{ mt: 2 }}>
+                                    No hay noticias en estado 'Terminado' pendientes de revisión.
+                                </Alert>
+                            )}
+                        </Box>
+                    )}
 
-                                            {/* Publicar/Desactivar (RF-07) - Solo Editor, si está en 'Terminado' o 'Publicado'/'Desactivado' */}
-                                            {isEditor && (noticia.estado === 'Terminado' || noticia.estado === 'Publicado' || noticia.estado === 'Desactivado') && (
-                                                <FormControl size="small" sx={{ minWidth: 100, ml: 1 }}>
-                                                    <Select
-                                                        value={noticia.estado}
-                                                        onChange={(e) => handleCambiarPublicacion(noticia.id, e.target.value)}
-                                                        displayEmpty
-                                                    >
-                                                        <MenuItem value="Terminado" disabled>Terminado</MenuItem>
-                                                        <MenuItem value="Publicado">Publicar</MenuItem>
-                                                        <MenuItem value="Desactivado">Desactivar</MenuItem>
-                                                    </Select>
-                                                </FormControl>
-                                            )}
 
-                                            {/* Eliminar (RF-09) - Disponible para Reportero (solo sus noticias) y Editor */}
-                                            <Tooltip title="Eliminar Noticia y su Imagen">
-                                                <IconButton
-                                                    color="error"
-                                                    onClick={() => handleDelete(noticia.id, noticia.imagenStoragePath)}
-                                                    size="small"
-                                                    sx={{ ml: 1 }}
-                                                >
-                                                    <DeleteIcon />
-                                                </IconButton>
-                                            </Tooltip>
+                    {/* Tabla General de Noticias - Título Limpio */}
+                    <Box sx={{ mt: 5 }}>
+                        <Typography
+                            variant="h5"
+                            component="h2"
+                            gutterBottom
+                            sx={{
+                                fontWeight: '600',
+                                color: '#1a237e',
+                                borderBottom: '1px solid #1a237e',
+                                pb: 1
+                            }}
+                        >
+                            📋 {isEditor ? 'Todas las Noticias' : 'Mis Noticias'}
+                        </Typography>
+                        <NewsTable
+                            noticias={noticias}
+                            onEdit={handleEdit}
+                            onDelete={handleDelete}
+                            loading={loading}
+                            isEditor={isEditor}
+                            refreshData={loadNoticias}
+                        />
+                    </Box>
 
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                </Paper>
-            )}
 
-            {/* Modal de Creación/Edición */}
-            <NewsFormModal
-                open={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                onSuccess={handleModalSuccess}
-                noticiaId={noticiaToEditId}
-            />
-        </Container>
+                </Box>
+            </Container>
+
+            {/* Footer Admin */}
+            <Box sx={{ bgcolor: '#1a237e', color: 'white', py: 2, textAlign: 'center', mt: 'auto' }}>
+                <Typography variant="body2">
+                    Panel de Administración | FuckNews VDL | Versión 1.0
+                </Typography>
+            </Box>
+        </Box>
     );
 };
 
